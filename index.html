@@ -1797,24 +1797,28 @@
       }
 
       function togglePause() {
+        console.log('togglePause called. gamePaused before: ', gamePaused);
         gamePaused = !gamePaused;
         const pauseModal = document.getElementById('pause-modal');
 
         if (gamePaused) {
+          console.log('Pausing game...');
           pauseModal.style.display = 'flex';
           bgm.pause();
           bossBgm.pause();
 
           // 모든 setInterval 중지
+          console.log('Clearing intervals...');
           clearInterval(fireIntervalId);
           clearInterval(spawnIntervalId);
           if (player.laserIntervalId) clearInterval(player.laserIntervalId);
-          if (player.lightningIntervalId)
-            clearInterval(player.lightningIntervalId);
-          allies.forEach((ally) => {
+          if (player.lightningIntervalId) clearInterval(player.lightningIntervalId);
+          allies.forEach(ally => {
             if (ally.attackIntervalId) clearInterval(ally.attackIntervalId);
           });
+
         } else {
+          console.log('Resuming game...');
           pauseModal.style.display = 'none';
           if (bossActive) {
             bossBgm.play();
@@ -1824,6 +1828,7 @@
           lastTime = performance.now(); // 게임 재개 시 시간 동기화
 
           // 모든 setInterval 다시 시작
+          console.log('Restarting intervals...');
           fireIntervalId = setInterval(
             () => fireProjectile(player),
             player.attackSpeed
@@ -1831,27 +1836,19 @@
           spawnIntervalId = setInterval(spawnEnemy, 4000);
           if (player.laserLevel > 0) {
             const currentInterval = 2000 - (player.laserLevel - 1) * 200;
-            player.laserIntervalId = setInterval(
-              fireLaser,
-              Math.max(500, currentInterval)
-            );
+            player.laserIntervalId = setInterval(fireLaser, Math.max(500, currentInterval));
           }
           if (player.lightningLevel > 0) {
             const currentInterval = 3000 - (player.lightningLevel - 1) * 300;
-            player.lightningIntervalId = setInterval(
-              strikeLightning,
-              Math.max(1000, currentInterval)
-            );
+            player.lightningIntervalId = setInterval(strikeLightning, Math.max(1000, currentInterval));
           }
-          allies.forEach((ally) => {
+          allies.forEach(ally => {
             if (!ally.isTurret) {
-              ally.attackIntervalId = setInterval(
-                () => fireProjectile(ally),
-                ally.attackSpeed
-              );
+              ally.attackIntervalId = setInterval(() => fireProjectile(ally), ally.attackSpeed);
             }
           });
         }
+        console.log('togglePause finished. gamePaused after: ', gamePaused);
       }
 
       function playMusic(trackToPlay, trackToStop) {
@@ -1913,5 +1910,6 @@
     </script>
   </body>
 </html>
+
 
 
