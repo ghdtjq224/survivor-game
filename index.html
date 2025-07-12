@@ -432,7 +432,9 @@
         <h2>패치노트 v1.1</h2>
         <ul>
           <li>이제 PC (P 키) 와 모바일에서 게임을 일시정지할 수 있습니다.</li>
-          <li>PC에서 스킬 선택 시 키보드(좌우 방향키, Enter)로 선택할 수 있습니다.</li>
+          <li>
+            PC에서 스킬 선택 시 키보드(좌우 방향키, Enter)로 선택할 수 있습니다.
+          </li>
           <li>보스전 중간 몬스터가 죽지 않던 버그를 수정했습니다.</li>
           <li>
             포탑과 동료(멍멍이)의 크기가 비정상적으로 변하던 문제를
@@ -484,7 +486,6 @@
 
     <div id="mobile-controls">
       <button id="pause-button" class="mobile-button">❚❚</button>
-      <button id="fullscreen-button" class="mobile-button">FS</button>
       <button id="ultimate-button" class="mobile-button">ULT</button>
     </div>
 
@@ -1343,13 +1344,15 @@
         let selectedUpgradeIndex = 0; // 현재 선택된 업그레이드 인덱스
 
         function updateSelection() {
-          optionsContainer.querySelectorAll('.upgrade-option').forEach((btn, index) => {
-            if (index === selectedUpgradeIndex) {
-              btn.classList.add('selected');
-            } else {
-              btn.classList.remove('selected');
-            }
-          });
+          optionsContainer
+            .querySelectorAll('.upgrade-option')
+            .forEach((btn, index) => {
+              if (index === selectedUpgradeIndex) {
+                btn.classList.add('selected');
+              } else {
+                btn.classList.remove('selected');
+              }
+            });
         }
 
         availableUpgrades.forEach((upgrade, index) => {
@@ -1370,7 +1373,10 @@
             selectedUpgradeIndex = Math.max(0, selectedUpgradeIndex - 1);
             updateSelection();
           } else if (e.key === 'ArrowRight') {
-            selectedUpgradeIndex = Math.min(availableUpgrades.length - 1, selectedUpgradeIndex + 1);
+            selectedUpgradeIndex = Math.min(
+              availableUpgrades.length - 1,
+              selectedUpgradeIndex + 1
+            );
             updateSelection();
           } else if (e.key === 'Enter') {
             selectUpgrade(availableUpgrades[selectedUpgradeIndex]);
@@ -1622,22 +1628,11 @@
 
       function setupMobileControls() {
         const ultButton = document.getElementById('ultimate-button');
-        const fsButton = document.getElementById('fullscreen-button');
         const pauseButton = document.getElementById('pause-button');
 
         ultButton.addEventListener('click', (e) => {
           e.stopPropagation();
           activateUltimate();
-        });
-        fsButton.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (!document.fullscreenElement) {
-            document.documentElement
-              .requestFullscreen()
-              .catch((err) => console.error(err));
-          } else {
-            document.exitFullscreen();
-          }
         });
         pauseButton.addEventListener('click', (e) => {
           e.stopPropagation();
