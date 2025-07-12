@@ -435,6 +435,21 @@
           <li>
             PC에서 스킬 선택 시 키보드(좌우 방향키, Enter)로 선택할 수 있습니다.
           </li>
+          <li>
+            보스전 최종 페이즈에 새로운 나선형 투사체 패턴이 추가되었습니다.
+          </li>
+          <li>새로운 스킬 '레이저 지원'과 '번개 지원'이 추가되었습니다.</li>
+          <li>
+            '레이저 지원'과 '번개 지원' 스킬의 쿨타임이 레벨업에 따라 감소하도록
+            밸런스가 조정되었습니다.
+          </li>
+          <li>
+            '궤도 폭탄' 스킬의 시각적 효과가 개선되어 더 잘 보이게 되었습니다.
+          </li>
+          <li>
+            게임 일시정지 시 모든 게임 요소(적, 투사체 등)가 함께 멈추도록
+            수정되었습니다.
+          </li>
           <li>보스전 중간 몬스터가 죽지 않던 버그를 수정했습니다.</li>
           <li>
             포탑과 동료(멍멍이)의 크기가 비정상적으로 변하던 문제를
@@ -514,7 +529,8 @@
         fireIntervalId,
         bossActive,
         gameStarted = false,
-        blackHoleTimer = 0;
+        blackHoleTimer = 0,
+        gameFrame; // requestAnimationFrame ID를 저장할 변수
       const bgm = document.getElementById('bgm');
       const bossBgm = document.getElementById('boss-bgm');
 
@@ -552,6 +568,13 @@
         hasBlackHole: false,
         ricochet: 0,
         isGhosted: false,
+        hasLaserSupport: false,
+        laserLevel: 0, // 레이저 스킬 레벨
+        hasLightningSupport: false,
+        lightningLevel: 0, // 번개 스킬 레벨
+        laserIntervalId: null, // 레이저 setInterval ID
+        lightningIntervalId: null, // 번개 setInterval ID
+        attackIntervalId: null, // 아군 공격 setInterval ID
       };
 
       function init() {
@@ -570,13 +593,11 @@
         score = 0;
         blackHoleTimer = 0;
 
-        if (fireIntervalId) clearInterval(fireIntervalId);
         fireIntervalId = setInterval(
           () => fireProjectile(player),
           player.attackSpeed
         );
 
-        if (spawnIntervalId) clearInterval(spawnIntervalId);
         spawnIntervalId = setInterval(spawnEnemy, 4000);
 
         if (isMobile()) {
@@ -586,20 +607,23 @@
         }
         playMusic(bgm, bossBgm);
 
-        requestAnimationFrame(gameLoop);
+        gameFrame = requestAnimationFrame(gameLoop);
       }
 
       let lastTime = 0;
       function gameLoop(timestamp) {
-        if (gamePaused || !gameStarted) {
+        if (!gameStarted) {
           requestAnimationFrame(gameLoop);
           return;
         }
-        const deltaTime = (timestamp - lastTime) / 1000 || 0;
-        lastTime = timestamp;
-        gameTime += deltaTime;
-        update(deltaTime);
-        draw();
+
+        if (!gamePaused) {
+          const deltaTime = (timestamp - lastTime) / 1000 || 0;
+          lastTime = timestamp;
+          gameTime += deltaTime;
+          update(deltaTime);
+          draw();
+        }
         requestAnimationFrame(gameLoop);
       }
 
@@ -724,7 +748,10 @@
         };
         allies.push(newAlly);
         if (!isTurret) {
-          setInterval(() => fireProjectile(newAlly), newAlly.attackSpeed);
+          newAlly.attackIntervalId = setInterval(
+            () => fireProjectile(newAlly),
+            newAlly.attackSpeed
+          );
         }
       }
 
@@ -771,6 +798,12 @@
           p.y += p.dy * p.speed * 100 * deltaTime;
           p.lifespan -= deltaTime;
 
+          if (p.isLaser && p.lifespan <= 0) {
+            // 레이저 수명 관리
+            projectiles.splice(i, 1);
+            continue;
+          }
+
           if (p.ricochetCount > 0) {
             if (
               (p.x < p.size && p.dx < 0) ||
@@ -801,8 +834,22 @@
       }
 
       function drawOrbiter(orb) {
-        ctx.font = '20px sans-serif';
-        ctx.fillText('💥', orb.x, orb.y);
+        ctx.fillStyle = '#ff4500'; // 주황색
+        ctx.strokeStyle = '#ffa500'; // 주황색 테두리
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#ff4500';
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, 10, 0, Math.PI * 2); // 크기 10인 원
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0; // 그림자 효과 초기화
+
+        // 이모지 추가 (선택 사항, 원과 함께 표시)
+        ctx.font = '15px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('💣', orb.x, orb.y);
       }
 
       function spawnEnemy() {
@@ -886,6 +933,7 @@
       }
 
       function updateEnemies(deltaTime) {
+        if (gamePaused) return; // 게임이 일시정지 상태면 적 움직임 중지
         enemies.forEach((e) => {
           e.speedMultiplier = 1;
           if (
@@ -916,8 +964,8 @@
           health: health,
           maxHealth: health,
           phase: 1,
-          cooldowns: { dash: 2.5, radial: 3.0, minions: 8.0 },
-          timers: { dash: 0, radial: 0, minions: 0 },
+          cooldowns: { dash: 2.5, radial: 3.0, minions: 8.0, spiral: 0.1 },
+          timers: { dash: 0, radial: 0, minions: 0, spiral: 0 },
           draw: function () {
             ctx.font = '80px sans-serif';
             ctx.textAlign = 'center';
@@ -940,6 +988,8 @@
           },
         };
       }
+
+      let spiralAngle = 0; // 나선형 패턴을 위한 전역 변수
 
       function updateBoss(deltaTime) {
         if (!boss) return;
@@ -988,9 +1038,32 @@
           }
         }
 
-        if (boss.phase >= 3 && boss.timers.minions > boss.cooldowns.minions) {
-          boss.timers.minions = 0;
-          for (let i = 0; i < 3; i++) spawnBossMinion(boss.x, boss.y);
+        if (boss.phase >= 3) {
+          if (boss.timers.minions > boss.cooldowns.minions) {
+            boss.timers.minions = 0;
+            for (let i = 0; i < 3; i++) spawnBossMinion(boss.x, boss.y);
+          }
+          // 새로운 나선형 패턴
+          if (boss.timers.spiral > boss.cooldowns.spiral) {
+            boss.timers.spiral = 0;
+            const numProjectiles = 3; // 한 번에 발사할 투사체 수
+            const spiralSpeed = 0.3; // 나선형 회전 속도
+
+            for (let i = 0; i < numProjectiles; i++) {
+              const angle = spiralAngle + i * ((Math.PI * 2) / numProjectiles);
+              projectiles.push({
+                x: boss.x,
+                y: boss.y,
+                size: 8,
+                damage: 12,
+                dx: Math.cos(angle),
+                dy: Math.sin(angle),
+                lifespan: 4,
+                owner: 'boss',
+              });
+            }
+            spiralAngle += spiralSpeed; // 다음 발사를 위해 각도 증가
+          }
         }
       }
 
@@ -1076,39 +1149,7 @@
               }
               projectiles.splice(pi, 1);
               if (e.health <= 0) {
-                const isBoss = e === boss;
-                const isElite = e.isElite;
-                createParticles(
-                  e.x,
-                  e.y,
-                  isBoss ? '#8e44ad' : '#e74c3c',
-                  isBoss ? 100 : isElite ? 40 : 20
-                );
-                if (isBoss) {
-                  bossActive = false;
-                  boss = null;
-                  score += 1000;
-                  playMusic(bgm, bossBgm);
-                  showRewardRoulette();
-                } else {
-                  if (bossActive) {
-                    enemies.splice(ei - 1, 1);
-                  } else {
-                    enemies.splice(ei, 1);
-                  }
-                  dropXpGem(e.x, e.y);
-                  score += isElite ? 50 : e.isBossMinion ? 5 : 10;
-                  player.ultimateGauge = Math.min(
-                    player.maxUltimateGauge,
-                    player.ultimateGauge +
-                      (isElite ? 15 : e.isBossMinion ? 1 : 5)
-                  );
-                  if (player.lifesteal > 0)
-                    player.health = Math.min(
-                      player.maxHealth,
-                      player.health + player.lifesteal
-                    );
-                }
+                handleEnemyDefeat(e);
               }
               break;
             }
@@ -1125,12 +1166,7 @@
               e === boss ? 20 : e.isElite ? 15 : e.isBossMinion ? 8 : 10
             );
             if (e !== boss) {
-              createParticles(e.x, e.y, '#e74c3c');
-              if (bossActive) {
-                enemies.splice(ei - 1, 1);
-              } else {
-                enemies.splice(ei, 1);
-              }
+              handleEnemyDefeat(e);
             }
           }
         }
@@ -1149,6 +1185,8 @@
           allHostiles.forEach((e) => {
             if (Math.hypot(orb.x - e.x, orb.y - e.y) < 15 + e.size / 2) {
               e.health -= 10 * deltaTime;
+              // 궤도 폭탄이 적에게 피해를 줄 때 파티클 효과 추가
+              createParticles(e.x, e.y, 'orange', 5);
             }
           });
         });
@@ -1191,6 +1229,78 @@
         document.getElementById('ultimate-bar-fill').style.width = `${
           (player.ultimateGauge / player.maxUltimateGauge) * 100
         }%`;
+      }
+
+      // 새로운 스킬 함수들
+      function fireLaser() {
+        if (gamePaused || !player.hasLaserSupport) return;
+        let closestEnemy = findClosestEnemy(player);
+        if (closestEnemy) {
+          projectiles.push({
+            x: player.x,
+            y: player.y,
+            size: 5,
+            speed: 10,
+            damage: 30,
+            dx:
+              (closestEnemy.x - player.x) /
+              Math.hypot(closestEnemy.x - player.x, closestEnemy.y - player.y),
+            dy:
+              (closestEnemy.y - player.y) /
+              Math.hypot(closestEnemy.x - player.x, closestEnemy.y - player.y),
+            lifespan: 0.5, // 짧은 수명으로 레이저처럼 보이게
+            owner: 'player',
+            isLaser: true, // 레이저임을 표시
+          });
+        }
+      }
+
+      function strikeLightning() {
+        if (gamePaused || !player.hasLightningSupport) return;
+        let targetEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+        if (targetEnemy) {
+          // 번개 효과를 위한 파티클 생성
+          createParticles(targetEnemy.x, targetEnemy.y, 'cyan', 20);
+          targetEnemy.health -= 50; // 번개 데미지
+          if (targetEnemy.health <= 0) {
+            handleEnemyDefeat(targetEnemy);
+          }
+        }
+      }
+
+      // 적 처치 로직을 분리하여 재사용
+      function handleEnemyDefeat(e) {
+        const isBoss = e === boss;
+        const isElite = e.isElite;
+        createParticles(
+          e.x,
+          e.y,
+          isBoss ? '#8e44ad' : '#e74c3c',
+          isBoss ? 100 : isElite ? 40 : 20
+        );
+        if (isBoss) {
+          bossActive = false;
+          boss = null;
+          score += 1000;
+          playMusic(bgm, bossBgm);
+          showRewardRoulette();
+        } else {
+          const index = enemies.indexOf(e);
+          if (index > -1) {
+            enemies.splice(index, 1);
+          }
+          dropXpGem(e.x, e.y);
+          score += isElite ? 50 : e.isBossMinion ? 5 : 10;
+          player.ultimateGauge = Math.min(
+            player.maxUltimateGauge,
+            player.ultimateGauge + (isElite ? 15 : e.isBossMinion ? 1 : 5)
+          );
+          if (player.lifesteal > 0)
+            player.health = Math.min(
+              player.maxHealth,
+              player.health + player.lifesteal
+            );
+        }
       }
 
       function gainXp(amount) {
@@ -1330,6 +1440,44 @@
             player.ricochet = (player.ricochet || 0) + 1;
           },
         },
+        {
+          name: '레이저 지원',
+          description:
+            '주기적으로 가장 가까운 적에게 레이저를 발사합니다. (레벨업 시 쿨타임 감소)',
+          apply: () => {
+            player.laserLevel++;
+            if (player.laserLevel === 1) {
+              setInterval(fireLaser, 2000); // 초기 쿨타임
+            } else {
+              // 레벨업 시 쿨타임 감소 로직 (예: 200ms씩 감소, 최소 500ms)
+              const currentInterval = 2000 - (player.laserLevel - 1) * 200;
+              clearInterval(player.laserIntervalId); // 기존 인터벌 제거
+              player.laserIntervalId = setInterval(
+                fireLaser,
+                Math.max(500, currentInterval)
+              );
+            }
+          },
+        },
+        {
+          name: '번개 지원',
+          description:
+            '주기적으로 적들에게 번개를 떨어뜨립니다. (레벨업 시 쿨타임 감소)',
+          apply: () => {
+            player.lightningLevel++;
+            if (player.lightningLevel === 1) {
+              setInterval(strikeLightning, 3000); // 초기 쿨타임
+            } else {
+              // 레벨업 시 쿨타임 감소 로직 (예: 300ms씩 감소, 최소 1000ms)
+              const currentInterval = 3000 - (player.lightningLevel - 1) * 300;
+              clearInterval(player.lightningIntervalId); // 기존 인터벌 제거
+              player.lightningIntervalId = setInterval(
+                strikeLightning,
+                Math.max(1000, currentInterval)
+              );
+            }
+          },
+        },
       ];
 
       function showUpgradeOptions() {
@@ -1392,7 +1540,6 @@
         document.getElementById('upgrade-modal').classList.remove('visible');
         gamePaused = false;
         window.removeEventListener('keydown', handleUpgradeSelectionKeys);
-        requestAnimationFrame(gameLoop);
       }
 
       function showRewardRoulette() {
@@ -1505,13 +1652,22 @@
         ctx.fillText('💎', gem.x, gem.y);
       }
       function drawProjectile(p) {
-        ctx.fillStyle = '#f1c40f';
-        ctx.shadowColor = '#f1c40f';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        if (p.isLaser) {
+          ctx.strokeStyle = '#ff0000';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.dx * 20, p.y - p.dy * 20); // 레이저 시작점
+          ctx.lineTo(p.x, p.y); // 레이저 끝점
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#f1c40f';
+          ctx.shadowColor = '#f1c40f';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
       }
       function drawBarrier() {
         ctx.strokeStyle = 'rgba(27, 188, 155, 0.6)'; // 투명도 증가
@@ -1648,6 +1804,16 @@
           pauseModal.style.display = 'flex';
           bgm.pause();
           bossBgm.pause();
+
+          // 모든 setInterval 중지
+          clearInterval(fireIntervalId);
+          clearInterval(spawnIntervalId);
+          if (player.laserIntervalId) clearInterval(player.laserIntervalId);
+          if (player.lightningIntervalId)
+            clearInterval(player.lightningIntervalId);
+          allies.forEach((ally) => {
+            if (ally.attackIntervalId) clearInterval(ally.attackIntervalId);
+          });
         } else {
           pauseModal.style.display = 'none';
           if (bossActive) {
@@ -1655,8 +1821,36 @@
           } else {
             bgm.play();
           }
-          lastTime = performance.now(); // requestAnimationFrame 재개를 위해 현재 시간으로 초기화
-          requestAnimationFrame(gameLoop);
+          lastTime = performance.now(); // 게임 재개 시 시간 동기화
+
+          // 모든 setInterval 다시 시작
+          fireIntervalId = setInterval(
+            () => fireProjectile(player),
+            player.attackSpeed
+          );
+          spawnIntervalId = setInterval(spawnEnemy, 4000);
+          if (player.laserLevel > 0) {
+            const currentInterval = 2000 - (player.laserLevel - 1) * 200;
+            player.laserIntervalId = setInterval(
+              fireLaser,
+              Math.max(500, currentInterval)
+            );
+          }
+          if (player.lightningLevel > 0) {
+            const currentInterval = 3000 - (player.lightningLevel - 1) * 300;
+            player.lightningIntervalId = setInterval(
+              strikeLightning,
+              Math.max(1000, currentInterval)
+            );
+          }
+          allies.forEach((ally) => {
+            if (!ally.isTurret) {
+              ally.attackIntervalId = setInterval(
+                () => fireProjectile(ally),
+                ally.attackSpeed
+              );
+            }
+          });
         }
       }
 
