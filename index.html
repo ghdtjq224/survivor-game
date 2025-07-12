@@ -221,7 +221,7 @@
         color: white;
         font-size: 20px;
         font-family: 'Orbitron', sans-serif;
-        display: flex;
+        display: none; /* 기본적으로 숨김 */
         justify-content: center;
         align-items: center;
         cursor: pointer;
@@ -423,6 +423,9 @@
         #score {
           font-size: 22px;
         }
+        #mobile-controls {
+          display: flex; /* 모바일에서만 보이도록 */
+        }
       }
     </style>
   </head>
@@ -491,6 +494,7 @@
       <div>
         <h2>일시정지</h2>
         <p>P 키를 다시 누르면 게임이 재개됩니다.</p>
+        <button id="pause-button" class="mobile-button">재개</button>
       </div>
     </div>
 
@@ -500,7 +504,6 @@
     </div>
 
     <div id="mobile-controls">
-      <button id="pause-button" class="mobile-button">❚❚</button>
       <button id="ultimate-button" class="mobile-button">ULT</button>
     </div>
 
@@ -1784,15 +1787,10 @@
 
       function setupMobileControls() {
         const ultButton = document.getElementById('ultimate-button');
-        const pauseButton = document.getElementById('pause-button');
 
         ultButton.addEventListener('click', (e) => {
           e.stopPropagation();
           activateUltimate();
-        });
-        pauseButton.addEventListener('click', (e) => {
-          e.stopPropagation();
-          togglePause();
         });
       }
 
@@ -1800,6 +1798,7 @@
         console.log('togglePause called. gamePaused before: ', gamePaused);
         gamePaused = !gamePaused;
         const pauseModal = document.getElementById('pause-modal');
+        const pauseButtonInModal = pauseModal.querySelector('#pause-button');
 
         if (gamePaused) {
           console.log('Pausing game...');
@@ -1816,6 +1815,11 @@
           allies.forEach(ally => {
             if (ally.attackIntervalId) clearInterval(ally.attackIntervalId);
           });
+
+          // 모달 내 버튼에 이벤트 리스너 추가
+          if (pauseButtonInModal) {
+            pauseButtonInModal.onclick = () => togglePause();
+          }
 
         } else {
           console.log('Resuming game...');
@@ -1910,6 +1914,3 @@
     </script>
   </body>
 </html>
-
-
-
